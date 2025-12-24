@@ -1,7 +1,6 @@
-
-
 <!-- This script displays 'adversarial images' and gets human classification of them
-Created by Chaz Firestone, 6/19/18 -->
+Created by Chaz Firestone, 6/19/18 
+Modified to load images from folder structure -->
 
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
 <script src="https://chazfirestone.org/mturk/seedrandom.js"></script>
@@ -12,27 +11,10 @@ Created by Chaz Firestone, 6/19/18 -->
 
 //Parameters//
 var experimentName = "Human classification of adversarial images -- GPCV";
-    
-var images = [
-  "cassette",
-  "fountain",
-  "gas_pump",
-  "goose",
-  "hotdog",
-  "ladle",
-  "minivan",
-  "potters_wheel"
-];
 
-
-var imagePath = "images/adversarial/";
-var realImagePath = "images/examples/";
-    
-var iti = 500; //msec
-var containerWidth = 750; //pixels
-var containerHeight = 700; //pixels
+var imagePairPath = "image_pairs/";
 var nTrials;
-var nExamples = 5;
+var nExamples = 6;
 
 //Other behind-the-scenes variables (not likely to be changed)
 var currentTrial = -1;
@@ -44,27 +26,45 @@ var trialRunning = false;
 //Functions
 
 function GenerateTrials() {
-  // generate all the trials
+  // generate all the trials from the image_pairs folders
   trials = [];
-  var trialImages = Shuffle(images);
-  trialImages = trialImages.concat(trialImages); // duplicate list for more trials
+  
+  // List of pair folders based on your folder structure
+  var pairFolders = [
+    "analog_clock_to_backpack",
+    "ballplayer_to_punching_bag",
+    "cassette_to_streetcar",
+    "freight_car_to_chainlink_fence",
+    "hognose_snake_to_banjo",
+    "ladle_to_acoustic_guitar",
+    "power_drill_to_school_bus",
+    "wooden_spoon_to_ping-pong_ball"
+  ];
+  
+  pairFolders = Shuffle(pairFolders);
 
-  var foilStart = Math.floor(Math.random() * (images.length - 1) + 1);
-
-  for (var i = 0; i < images.length; i++) {
+  for (var i = 0; i < pairFolders.length; i++) {
     var trial = {};
-    trial.image = trialImages[i];
-
-    // each image has one file, e.g., "cassette.jpg"
-    trial.imageName = trial.image + ".jpg";
-
-    trial.foil = trialImages[(foilStart + i) % images.length]; // wrap around safely
-
-    var options = [trial.foil, trial.image];
+    trial.pairName = pairFolders[i];
+    
+    // Main image will be altered.jpg in the root of the pair folder
+    trial.image = imagePairPath + trial.pairName + "/altered.jpg";
+    trial.imageName = trial.pairName;
+    
+    // Extract the two class names from the folder name
+    var parts = trial.pairName.split("_to_");
+    trial.class1 = parts[0].replace(/_/g, " ");
+    trial.class2 = parts[1].replace(/_/g, " ");
+    
+    var options = [trial.class1, trial.class2];
     options = Shuffle(options);
 
     trial.left = options[0];
     trial.right = options[1];
+    
+    // Determine which folder (pred or real) corresponds to left and right
+    trial.leftFolder = (trial.left === trial.class1) ? "real" : "pred";
+    trial.rightFolder = (trial.right === trial.class1) ? "real" : "pred";
 
     trials.push(trial);
   }
@@ -88,9 +88,10 @@ function addHTML() {
 	$('#experiment').append('<input type="hidden" id="totalTime" name="totalTime">');
 	
 	for (var i=0; i<nTrials; i++) { 
-		$('#experiment').append('<input type="hidden" id="t' + i + '_target" name=t' + i +'_target value="">');
+		$('#experiment').append('<input type="hidden" id="t' + i + '_pairName" name=t' + i +'_pairName value="">');
         $('#experiment').append('<input type="hidden" id="t' + i + '_imageName" name=t' + i +'_imageName value="">');
-        $('#experiment').append('<input type="hidden" id="t' + i + '_foil" name=t' + i +'_foil value="">');
+        $('#experiment').append('<input type="hidden" id="t' + i + '_class1" name=t' + i +'_class1 value="">');
+        $('#experiment').append('<input type="hidden" id="t' + i + '_class2" name=t' + i +'_class2 value="">');
 		$('#experiment').append('<input type="hidden" id="t' + i + '_left" name=t' + i +'_left value="">');
         $('#experiment').append('<input type="hidden" id="t' + i + '_right" name=t' + i +'_right value="">');
         $('#experiment').append('<input type="hidden" id="t' + i + '_response" name=t' + i +'_response value="">');
@@ -100,22 +101,20 @@ function addHTML() {
     
 	for (var i=0; i<nTrials; i++) {
         
-        var trialImageName = trials[i].imageName;
-        $('#trialImages').append('<img id="trialImage_t' + i + '" class="trialImages" src="' + imagePath + trialImageName + '">');
+        var trialImageName = trials[i].image;
+        $('#trialImages').append('<img id="trialImage_t' + i + '" class="trialImages" src="' + trialImageName + '">');
         $('#leftOptions').append('<a href=\'javascript:respond("left")\' id="leftButton_t' + i + '" class="optionButton">'+ trials[i].left + '</a>');
         $('#rightOptions').append('<a href=\'javascript:respond("right")\' id="rightButton_t' + i + '" class="optionButton">'+ trials[i].right + '</a>');
         
-        //image examples
+        //image examples from pred and real folders
 		for (var j=0; j<nExamples; j++) {
-			var leftImageName = trials[i].left;
-			leftImageName = leftImageName.replace(/ /g,"_");
-			leftImageName = leftImageName + '_' + (j+1) + '.png';
-			$('#leftImages').append('<img id="leftImage_' + i + '_' + j + '" class="leftImages" src="' + realImagePath + leftImageName + '">'+'</a>');
+			var leftImagePath = imagePairPath + trials[i].pairName + "/" + trials[i].leftFolder + "/";
+			var leftImageName = leftImagePath + (j + 1) + ".JPEG";
+			$('#leftImages').append('<img id="leftImage_' + i + '_' + j + '" class="leftImages" src="' + leftImageName + '">');
 			
-			var rightImageName = trials[i].right;
-			rightImageName = rightImageName.replace(/ /g,"_");
-			rightImageName = rightImageName + '_' + (j+1) + '.png';
-			$('#rightImages').append('<img id="rightImage_' + i + '_' + j + '" class="rightImages" src="' + realImagePath + rightImageName + '">'+'</a>');
+			var rightImagePath = imagePairPath + trials[i].pairName + "/" + trials[i].rightFolder + "/";
+			var rightImageName = rightImagePath + (j + 1) + ".JPEG";
+			$('#rightImages').append('<img id="rightImage_' + i + '_' + j + '" class="rightImages" src="' + rightImageName + '">');
 		}
 
 	}
@@ -123,7 +122,7 @@ function addHTML() {
 	
 function assignAttributes() {
 //use css to make the various html objects have the properties we said we wanted them to have
-	$('#container').css({'width':containerWidth,'height':containerHeight});
+	$('#container').css({'width':750,'height':700});
 }
 
 function assignExperimentInfo() {
@@ -178,9 +177,10 @@ function respond(response) {
 
 function recordData(trial,rt,response) {
 //record data by assigning various values to hidden inputs
-	$('#' + 't' + currentTrial + '_target').val(trial.image);
+	$('#' + 't' + currentTrial + '_pairName').val(trial.pairName);
     $('#' + 't' + currentTrial + '_imageName').val(trial.imageName);
-    $('#' + 't' + currentTrial + '_foil').val(trial.foil);
+    $('#' + 't' + currentTrial + '_class1').val(trial.class1);
+    $('#' + 't' + currentTrial + '_class2').val(trial.class2);
     $('#' + 't' + currentTrial + '_left').val(trial.left);
     $('#' + 't' + currentTrial + '_right').val(trial.right);
 	$('#' + 't' + currentTrial + '_response').val(response);
@@ -190,7 +190,7 @@ function recordData(trial,rt,response) {
 
 function blank(next) {
 //blank the screen, then start the next trial
-	setTimeout(next,iti);
+	setTimeout(next,500);
 }
 
 function NextTrial() {
@@ -422,14 +422,15 @@ body {
 
 .leftImages, .rightImages {
     display: none;
-    max-width: 100px;     /* smaller reference example images */
-    max-height: 100px;
-    width: auto;
-    height: auto;
+    width: 80px;
+    height: 80px;
+    object-fit: cover;     /* 🔥 zoom + crop to fill box */
+    object-position: center;
     margin: 4px;
     border: 1px solid #555;
     border-radius: 4px;
 }
+
 
 
     
@@ -548,4 +549,3 @@ body {
 
 <!-- REMOVE ME BEFORE PUTTING ON TURK -->
 <input type="submit" id="submitButton" name="submitButton">
-
